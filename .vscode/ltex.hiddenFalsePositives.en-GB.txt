@@ -1,0 +1,2 @@
+{"rule":"PASSIVE_VOICE","sentence":"^\\QThe likelihood function discernible how the data is generated from the model.\\E$"}
+{"rule":"PASSIVE_VOICE","sentence":"^\\QIn this example, we assume the data is generated from a normal distribution with mean equals to the output of the model and standard deviation equals to \\E(?:Dummy|Ina|Jimmy-)[0-9]+\\Q.\\E$"}
