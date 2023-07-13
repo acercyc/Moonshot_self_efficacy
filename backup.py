@@ -1,4 +1,3 @@
-%matplotlib qt
 # %%
 import arviz as az
 import pandas as pd
@@ -15,19 +14,6 @@ def f_BetaNorm(alpha, beta, x):
     y_max = x_max ** (alpha - 1) * (1 - x_max) ** (beta - 1)
     y_normalized = y / y_max
     return y_normalized
-
-
-def get_var_names(idata):
-    variables = idata.posterior.data_vars
-    var_names = list(variables.keys())
-    return var_names
-
-
-def get_posterior_mean(idata):
-    summary = pm.summary(idata)
-    posterior_mean = summary["mean"]
-    posterior_mean
-    return posterior_mean
 
 
 # Task
@@ -94,87 +80,26 @@ class Estimator_BetaNorm(Estimator):
         self.beta = beta
         self.sigma = sigma
 
-    def sample_prior(self):
-        with self.model:
-            idata = pm.sample(tune=200, chains=2, cores=1)
-        self.idata = idata
-        return idata
-
-    def fit(self, x, y):
-        with self.model:
-            # likelihood
-            y_obs = pm.Normal("y_obs", mu=f_BetaNorm(self.alpha, self.beta, x), sigma=self.sigma, observed=y)
-
-            # inference
-            idata = pm.sample(tune=200, chains=2, cores=1)
+    def fit(self, x=None, y=None):
+        if x is None:
+            with self.model:
+                # inference
+                idata = pm.sample(tune=200, chains=1, cores=1)
+        else:
+            with self.model:
+                # likelihood
+                y_obs = pm.Normal("y_obs", mu=f_BetaNorm(self.alpha, self.beta, x), sigma=self.sigma, observed=y)
+                # inference
+                idata = pm.sample(tune=200, chains=1, cores=1)
             self.y_obs = y_obs
         self.idata = idata
+
         return idata
 
 
 # visualizer
 class Visualizer:
     pass
-
-
-class Visualizer_BetaNorm(Visualizer):
-    def __init__(self, figsize=(8, 8)):
-        fig = plt.figure(figsize=figsize)
-        fig.subplots_adjust(hspace=0.3, wspace=0.3)
-        self.fig = fig
-        
-    def plot(self, idata):
-        self.plot_model(idata)
-        self.plot_joint_posterior(idata)
-        self.plot_posterior_alpha(idata)
-        self.plot_posterior_beta(idata)
-        plt.show()
-        
-    def plot_model(self, idata):
-        fig = self.fig
-        ax_model = fig.add_subplot(2, 2, 1)
-        posterior_mean = get_posterior_mean(idata)
-        x = np.linspace(0, 1, 1000)
-        alpha_estimated = posterior_mean["alpha"]
-        beta_estimated = posterior_mean["beta"]
-        y_estimated = f_BetaNorm(alpha_estimated, beta_estimated, x)
-        ax_model.plot(x, y_estimated, label=f"Updated model")
-        ax_model.set_xlabel("Assistance")
-        ax_model.set_ylabel("Normalised self-efficacy")
-        ax_model.set_title(
-            f"Assistance vs Normalised self-efficacy \n(alpha={alpha_estimated:.2f}, beta={beta_estimated:.2f})",
-            fontsize=10,
-        )
-        ax_model.set_xlim(0, 1.1)
-        ax_model.set_ylim(0, 1.1)
-        ax_model.grid(True)
-        
-    def plot_joint_posterior(self, idata):
-        fig = self.fig
-        ax_joint = fig.add_subplot(2, 2, 2)
-        az.plot_pair(
-            idata,
-            var_names=["alpha", "beta"],
-            kind="kde",
-            figsize=[8, 8],
-            divergences=True,
-            textsize=10,
-            colorbar=True,
-            point_estimate="mean",
-            ax=ax_joint,  # specify the ax parameter
-        )
-        ax_joint.set_title("Joint distribution of alpha and beta", fontsize=10)
-        
-    def plot_posterior_alpha(self, idata):
-        fig = self.fig
-        ax_alpha = fig.add_subplot(2, 2, 3)
-        az.plot_posterior(idata, var_names='alpha', ax=ax_alpha, textsize=10, point_estimate='mean', round_to=2)
-        
-    def plot_posterior_beta(self, idata):
-        fig = self.fig
-        ax_beta = fig.add_subplot(2, 2, 4)
-        az.plot_posterior(idata, var_names='beta', ax=ax_beta, textsize=10, point_estimate='mean', round_to=2)
-
 
 
 class Participant:
@@ -223,28 +148,89 @@ class Participant_dummy(Participant):
         # normalise bot to 0 to 1
         self_efficacy = (self_efficacy - self_efficacy.min()) / (self_efficacy.max() - self_efficacy.min())
         return ass1, ass2, self_efficacy
-
-
+    
+    
 if __name__ == "__main__":
     # ---------------------------------------------------------------------------- #
     #                              create participant                              #
     # ---------------------------------------------------------------------------- #
-    participant = Participant_dummy()
+    alpha_true = 3
+    beta_true = 6
+    sigma_true = 0.1
+    participant = Participant_BetaNorm(alpha_true, beta_true, sigma_true)
+
+    # plot participant
+    fig, ax = participant.plot()
+
+    # response
+    n = 100
+    x_sampled = np.random.uniform(0, 1, n)
+    y_sampled = participant.response(x_sampled)
+
+    # plot response
+    plt.figure(figsize=(8, 6))
+    plt.scatter(x_sampled, y_sampled)
+    plt.title("Response of participant")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.grid(True)
+    plt.show()
 
     # ---------------------------------------------------------------------------- #
-    #                               create estimator                               #
+    #                                  Create task                                 #
     # ---------------------------------------------------------------------------- #
-    estimator = Estimator_BetaNorm()
-    idata = estimator.sample_prior()
-    var_name = get_var_names(idata)
-    # %%
-    ass1, ass2, self_efficacy = participant.getData(10)
-    idata = estimator.fit(ass1, self_efficacy)
+    # ass1 and ass2 are the assist rate of the two agents
+    task = Task_dummy()
+    for step in range(0, 11):
+        estimator_1 = Estimator_BetaNorm()
+        estimator_2 = Estimator_BetaNorm()
+        
+        if step == 0:
+            idata_1 = estimator_1.fit(None)
+            idata_2 = estimator_2.fit(None)
+            
+        else:
+            ass1, ass2, bot = task.step(step)
+            idata_1 = estimator_1.fit(ass1, bot)
+            idata_2 = estimator_2.fit(ass2, bot)
 
-    # create visualizer
-    plt.close("all")
-    visualizer = Visualizer_BetaNorm()
-    visualizer.plot(idata)
-    # visualizer.plot_model(idata)
+        # summary of idata
+        alpha_1, beta_1, sigma_1 = pm.summary(idata_1, var_names=["alpha", "beta", "sigma"])["mean"]
+        alpha_2, beta_2, sigma_2 = pm.summary(idata_2, var_names=["alpha", "beta", "sigma"])["mean"]
+        
+        # print(f"alpha: {alpha}, beta: {beta}, sigma: {sigma}")
 
-    
+        # ---------------------------------------------------------------------------- #
+        #                                 Visualization                                #
+        # ---------------------------------------------------------------------------- #
+        x = np.linspace(0, 1, 1000)
+        y_1 = f_BetaNorm(alpha_1, beta_1, x)
+        y_2 = f_BetaNorm(alpha_2, beta_2, x)
+        fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+        ax[0].plot(x, y_1)
+        if step != 0:
+            ax[0].scatter(ass1, bot, color="red")
+        ax[0].set_title("Estimated Internal model 1 of participant")
+        ax[0].set_xlabel("Normalised Assistance Rate 1")
+        ax[0].set_ylabel("Normalised Self-efficiency")
+        ax[0].grid(True)
+        
+        ax[1].plot(x, y_2)
+        if step != 0:
+            ax[1].scatter(ass2, bot, color="red")
+        ax[1].set_title("Estimated Internal model 2 of participant")
+        ax[1].set_xlabel("Normalised Assistance Rate 2")
+        ax[1].set_ylabel("Normalised Self-efficiency")
+        ax[1].grid(True)
+        
+        plt.show()
+        
+        # save figure
+        # create result folder
+        if not os.path.exists("./result"):
+            os.mkdir("./result")
+        fig.savefig(f"./result/{step}.png")
+        
+
+
+# %%
