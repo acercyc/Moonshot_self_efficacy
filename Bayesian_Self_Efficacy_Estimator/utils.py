@@ -1,4 +1,4 @@
-%matplotlib qt
+# %matplotlib qt
 # %%
 import arviz as az
 import pandas as pd
@@ -85,8 +85,8 @@ class Estimator_BetaNorm(Estimator):
         model = pm.Model()
         with model:
             # prior
-            alpha = pm.Uniform("alpha", lower=2, upper=8)
-            beta = pm.Uniform("beta", lower=2, upper=8)
+            alpha = pm.Uniform("alpha", lower=0, upper=10)
+            beta = pm.Uniform("beta", lower=0, upper=10)
             sigma = pm.Gamma("sigma", alpha=1, beta=1)
 
         self.model = model
@@ -118,37 +118,94 @@ class Visualizer:
 
 
 class Visualizer_BetaNorm(Visualizer):
-    def __init__(self, figsize=(8, 8)):
+    def __init__(self, figsize=(12, 12), windowTitle=None):
         fig = plt.figure(figsize=figsize)
         fig.subplots_adjust(hspace=0.3, wspace=0.3)
+        self.h_idata = []  # history of idata
         self.fig = fig
-        
-    def plot(self, idata):
+
+    def cal_model(self, idata):
+        posterior_mean = get_posterior_mean(idata)
+        alpha_estimated = posterior_mean["alpha"]
+        beta_estimated = posterior_mean["beta"]
+        x = np.linspace(0, 1, 1000)
+        y_estimated = f_BetaNorm(alpha_estimated, beta_estimated, x)
+        return x, y_estimated
+
+    def add_idata(self, idata):
+        self.h_idata.append(idata)
+
+    def plot(self, idata=None):
+        if idata is None:
+            idata = self.h_idata[-1]
+        else:
+            self.add_idata(idata)
+        # clean ax
+        plt.clf()
         self.plot_model(idata)
         self.plot_joint_posterior(idata)
         self.plot_posterior_alpha(idata)
         self.plot_posterior_beta(idata)
-        plt.show()
-        
+        plt.show(block=False)
+
+    def plot_history(self, idata=None):
+        if idata is None:
+            idata = self.h_idata[-1]
+        else:
+            self.add_idata(idata)
+        # clean ax
+        plt.clf()
+        self.plot_model_history()
+        self.plot_joint_posterior(idata)
+        self.plot_posterior_alpha(idata)
+        self.plot_posterior_beta(idata)
+        plt.show(block=False)
+
     def plot_model(self, idata):
         fig = self.fig
         ax_model = fig.add_subplot(2, 2, 1)
-        posterior_mean = get_posterior_mean(idata)
-        x = np.linspace(0, 1, 1000)
-        alpha_estimated = posterior_mean["alpha"]
-        beta_estimated = posterior_mean["beta"]
-        y_estimated = f_BetaNorm(alpha_estimated, beta_estimated, x)
+        x, y_estimated = self.cal_model(idata)
         ax_model.plot(x, y_estimated, label=f"Updated model")
         ax_model.set_xlabel("Assistance")
         ax_model.set_ylabel("Normalised self-efficacy")
         ax_model.set_title(
-            f"Assistance vs Normalised self-efficacy \n(alpha={alpha_estimated:.2f}, beta={beta_estimated:.2f})",
+            "Assistance vs Normalised self-efficacy",
             fontsize=10,
         )
         ax_model.set_xlim(0, 1.1)
         ax_model.set_ylim(0, 1.1)
         ax_model.grid(True)
-        
+        self.ax_model = ax_model
+
+    def plot_model_history(self):
+        fig = self.fig
+        ax_model = fig.add_subplot(2, 2, 1)
+        h_idata = self.h_idata
+        n_history = len(h_idata)
+        if n_history > 10:
+            n_history = 10
+        cmap = plt.get_cmap("Wistia")
+        cmap = cmap.reversed()
+
+        for i in range(n_history):
+            color = cmap(i / n_history)
+            idata = h_idata[-i - 1]
+            x, y_estimated = self.cal_model(idata)
+            transparency = 1 - (i / n_history) * 0.3
+            ax_model.plot(x, y_estimated, color=color, alpha=transparency, label=f"trial {n_history-i}")
+            
+        ax_model.set_xlabel("Assistance")
+        ax_model.set_ylabel("Normalised self-efficacy")
+        ax_model.set_title(
+            "Assistance vs Normalised self-efficacy",
+            fontsize=10,
+        )
+        ax_model.set_xlim(0, 1.1)
+        ax_model.set_ylim(0, 1.1)
+        ax_model.grid(True)
+        ax_model.legend()
+        self.ax_model = ax_model
+
     def plot_joint_posterior(self, idata):
         fig = self.fig
         ax_joint = fig.add_subplot(2, 2, 2)
@@ -163,18 +220,22 @@ class Visualizer_BetaNorm(Visualizer):
             point_estimate="mean",
             ax=ax_joint,  # specify the ax parameter
         )
+        ax_joint.set_xlim(0, 10)
+        ax_joint.set_ylim(0, 10)
         ax_joint.set_title("Joint distribution of alpha and beta", fontsize=10)
-        
+        self.ax_joint = ax_joint
+
     def plot_posterior_alpha(self, idata):
         fig = self.fig
         ax_alpha = fig.add_subplot(2, 2, 3)
-        az.plot_posterior(idata, var_names='alpha', ax=ax_alpha, textsize=10, point_estimate='mean', round_to=2)
-        
+        az.plot_posterior(idata, var_names="alpha", ax=ax_alpha, textsize=10, point_estimate="mean", round_to=2)
+        self.ax_alpha = ax_alpha
+
     def plot_posterior_beta(self, idata):
         fig = self.fig
         ax_beta = fig.add_subplot(2, 2, 4)
-        az.plot_posterior(idata, var_names='beta', ax=ax_beta, textsize=10, point_estimate='mean', round_to=2)
-
+        az.plot_posterior(idata, var_names="beta", ax=ax_beta, textsize=10, point_estimate="mean", round_to=2)
+        self.ax_beta = ax_beta
 
 
 class Participant:
@@ -215,8 +276,8 @@ class Participant_dummy(Participant):
         data = pd.read_csv("20230705_Dummydata.csv")
         self.data = data
 
-    def getData(self, iTrial):
-        data_ = self.data.iloc[:iTrial, :]
+    def getData(self, itrial):
+        data_ = self.data.iloc[:itrial, :]
         ass1 = np.array(data_["AssistRate1"] / 100)
         ass2 = np.array(data_["AssistRate2"] / 100)
         self_efficacy = np.array(data_["Botton_Length"])
@@ -237,14 +298,26 @@ if __name__ == "__main__":
     estimator = Estimator_BetaNorm()
     idata = estimator.sample_prior()
     var_name = get_var_names(idata)
-    # %%
-    ass1, ass2, self_efficacy = participant.getData(10)
-    idata = estimator.fit(ass1, self_efficacy)
 
-    # create visualizer
-    plt.close("all")
+    # ---------------------------------------------------------------------------- #
+    #                               create visualizer                              #
+    # ---------------------------------------------------------------------------- #
+    plt.close("all") 
     visualizer = Visualizer_BetaNorm()
-    visualizer.plot(idata)
-    # visualizer.plot_model(idata)
+    plt.gcf().canvas.manager.window.activateWindow()
+    plt.pause(0.1)
 
-    
+    # ---------------------------------------------------------------------------- #
+    # %%
+
+    for i in range(1, 11):
+        ass1, ass2, self_efficacy = participant.getData(i)
+        estimator = Estimator_BetaNorm()
+        idata = estimator.fit(ass1, self_efficacy)
+        visualizer.plot_history(idata)
+        visualizer.ax_model.scatter(ass1, self_efficacy, color="red", label=f"trial {i}")
+        # refresh and show the figure
+        plt.suptitle(f"trial {i}")
+        plt.show(block=False)
+        plt.pause(0.1)
+        # bring figure window to the front
