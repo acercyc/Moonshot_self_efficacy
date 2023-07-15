@@ -270,6 +270,32 @@ class Participant_BetaNorm(Participant):
 
         return fig, ax
 
+class Participant_BetaNorm_2(Participant):
+    def __init__(self, alpha=3, beta=6, sigma=0.1, n_trial=100):
+        self.alpha = alpha
+        self.beta = beta
+        self.sigma = sigma
+        x = np.random.uniform(0, 1, n_trial)
+        y = f_BetaNorm(self.alpha, self.beta, x) + np.random.normal(0, self.sigma, len(x))
+        x_true = np.linspace(0, 1, 1000)
+        y_true = f_BetaNorm(self.alpha, self.beta, x_true)
+        self.TrueModel = (x_true, y_true)
+        self.data = (x, y)
+        
+    def getData(self, itrial):
+        x, y = self.data
+        return x[:itrial], y[:itrial]
+    
+    # def getTrueModel(self):
+    #     x = np.linspace(0, 1, 1000)
+    #     y = f_BetaNorm(self.alpha, self.beta, x)
+    #     return x, y
+
+    def response(self, x):
+        y = f_BetaNorm(self.alpha, self.beta, x) + np.random.normal(0, self.sigma, len(x))
+        y = np.clip(y, 0, 1)
+        return y
+
 
 class Participant_dummy(Participant):
     def __init__(self):
@@ -287,37 +313,4 @@ class Participant_dummy(Participant):
 
 
 if __name__ == "__main__":
-    # ---------------------------------------------------------------------------- #
-    #                              create participant                              #
-    # ---------------------------------------------------------------------------- #
-    participant = Participant_dummy()
-
-    # ---------------------------------------------------------------------------- #
-    #                               create estimator                               #
-    # ---------------------------------------------------------------------------- #
-    estimator = Estimator_BetaNorm()
-    idata = estimator.sample_prior()
-    var_name = get_var_names(idata)
-
-    # ---------------------------------------------------------------------------- #
-    #                               create visualizer                              #
-    # ---------------------------------------------------------------------------- #
-    plt.close("all") 
-    visualizer = Visualizer_BetaNorm()
-    plt.gcf().canvas.manager.window.activateWindow()
-    plt.pause(0.1)
-
-    # ---------------------------------------------------------------------------- #
-    # %%
-
-    for i in range(1, 11):
-        ass1, ass2, self_efficacy = participant.getData(i)
-        estimator = Estimator_BetaNorm()
-        idata = estimator.fit(ass1, self_efficacy)
-        visualizer.plot_history(idata)
-        visualizer.ax_model.scatter(ass1, self_efficacy, color="red", label=f"trial {i}")
-        # refresh and show the figure
-        plt.suptitle(f"trial {i}")
-        plt.show(block=False)
-        plt.pause(0.1)
-        # bring figure window to the front
+    pass
