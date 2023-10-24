@@ -4,16 +4,6 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 from scipy.optimize import minimize
 
-from model import model
-import numpyro
-import numpyro.distributions as dist
-import matplotlib.pyplot as plt
-import jax.random as random
-import jax.numpy as jnp
-import arviz as az
-
-
-
 class Agent:
     pass
 
@@ -110,70 +100,6 @@ class Agent_BayesianDecision(Agent):
         ax.legend()
         fig.show()
         return fig, ax
-
-class Visualizer:
-    def __init__(self, figsize=(12, 12), windowTitle=None):
-        fig = plt.figure(figsize=figsize)
-        fig.subplots_adjust(hspace=0.3, wspace=0.3)
-        self.h_idata = []  # history of idata
-        self.fig = fig
-        
-    def plot_model(self, model):
-        fig = self.fig
-        ax_model = fig.add_subplot(2, 2, 1)
-        model.plot_utility(fig, ax_model)
-        
-    def plot_data(self, a, se):
-        fig = self.fig
-        ax_data = fig.add_subplot(2, 2, 2)
-        ax_data.plot(se, a, 'o', fillstyle='none')
-        ax_data.set_xlabel('Self efficacy')
-        ax_data.set_ylabel('Assistance level')
-        ax_data.set_xlim([0, 1])
-        ax_data.set_ylim([0, 1])
-        ax_data.set_title('Self efficacy vs Assistance level')
     
-    def plot_joint_posterior(self, mcmc):
-        # extact median alpha and beta
-        alpha = np.median(mcmc.get_samples()['alpha'])
-        beta = np.median(mcmc.get_samples()['beta'])
-        ax_joint = self.fig.add_subplot(2, 2, 3)
-        # plot joint posterior of alpha and beta
-        az.plot_pair(mcmc, var_names=['alpha', 'beta'], kind='kde', ax=ax_joint)
-        ax_joint.set_title("Joint distribution of alpha and beta", fontsize=10)
-        
-    def plot_inference(self, mcmc):
-        # extact median alpha and beta
-        alpha = np.median(mcmc.get_samples()['alpha'])
-        beta = np.median(mcmc.get_samples()['beta'])
-        ax_inference = self.fig.add_subplot(2, 2, 4)
-        # plot joint posterior of alpha and beta
-        Agent_BayesianDecision(alpha, beta).plot_utility(self.fig, ax_inference)
 
-
-
-if __name__ == '__main__':
-    # generate dummy data        
-    agent = Agent_BayesianDecision(10, 10, p_self=0.5, p_others=0.5)
-    a = np.random.normal(agent.find_optimal_assistance(), 0.03, 10)
-    se = np.random.normal(agent.self_efficacy(), 0.01, 10)
-    x = np.linspace(0, 1, 100)
-    
-    # Inference
-    a_ = jnp.array(a)
-    se_ = jnp.array(se)
-    kernel = numpyro.infer.NUTS(model, init_strategy=numpyro.infer.init_to_median)
-    mcmc = numpyro.infer.MCMC(kernel, num_warmup=500, num_samples=1000)
-    mcmc.run(random.PRNGKey(0), a_, se_)
-    mcmc.print_summary()
-    
-    # %% 
-    # Visualize
-    v = Visualizer()
-    v.plot_model(agent)
-    v.plot_data(a, se)
-    v.plot_joint_posterior(mcmc)
-    v.plot_inference(mcmc)
-    v.fig.canvas.manager.window.activateWindow()
-
-# %%
+Agent_BayesianDecision(20, 4, p_self=0.9, p_others=0.1, gamma_self=1, gamma_others=0).plot_utility()
