@@ -5,7 +5,6 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 
-# %%
 def generate_path(n, frequency_range, start_y, end_y, nSample=1000, xy_ratio=0.25):
     """
     Generates a path by combining n sine waves with frequencies from the given range.
@@ -88,23 +87,30 @@ def fn_assistance(mouse_x, mouse_y, path_x, path_y, assistance):
 
 # Parameters
 radius = 0.25
-line_pos = 0.45
+line_pos_up = 0.45
+line_pos_down = -0.40
 vx_max = 0.05
 vy_max = 0.05
-assistance_keyAdd = 'right'
-assistance_keySub = 'left'
+assistance_keyAdd = "right"
+assistance_keySub = "left"
 assistance_min = 0
 assistance_max = 10
 isNewPath = False
 
+# path parameters
+path_n = 3
+path_frequency_range = (0.5, 1.3)
+
 # start point
-start_x, start_y = 0, -line_pos
-end_x, end_y = 0, line_pos
+start_x, start_y = 0, line_pos_down
+end_x, end_y = 0, line_pos_up
 
 
 # create path
 nPathSamples = 1000
-path_x, path_y = generate_path(3, (0.5, 1.3), start_y, end_y, nSample=nPathSamples)
+path_x, path_y = generate_path(
+    path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
+)
 plt.plot(path_x, path_y)
 plt.gca().set_aspect("equal", adjustable="box")
 # %%
@@ -115,10 +121,18 @@ win = visual.Window(
 )
 
 # boundary lines
-line_1 = visual.Line(
-    win, start=(-0.5, -line_pos), end=(0.5, -line_pos), lineColor="white"
-)
+line_1 = visual.Line(win, start=(-0.5, start_y), end=(0.5, start_y), lineColor="white")
 line_2 = visual.Line(win, start=(-0.5, end_y), end=(0.5, end_y), lineColor="white")
+
+
+# path stimulus
+
+curve = visual.ShapeStim(win, vertices=list(zip(path_x, path_y))
+, closeShape=False, lineColor=[0.3, 0.3, 0.3])
+curve.draw()
+
+curve_self = visual.ShapeStim(win, vertices=list(zip(path_x, path_y))
+, closeShape=False, lineColor=[-1, 1, -1])
 
 # target
 target = visual.Circle(
@@ -135,14 +149,14 @@ assistance_rating = visual.RatingScale(
     stretch=4,
     scale=None,
     markerStart=0,
-    pos=(0, -0.8),
+    pos=(0, -0.9),
     textColor="white",
     lineColor="white",
     showValue=False,
     markerColor="white",
     marker="triangle",
     showAccept=False,
-    noMouse=True
+    noMouse=True,
 )
 
 
@@ -155,6 +169,7 @@ text_score = visual.TextStim(
 line_1.draw()
 line_2.draw()
 text_score.draw()
+curve.draw()
 assistance_rating.draw()
 # Draw the start point
 target.draw()
@@ -175,12 +190,13 @@ for iTrial in range(100):
     ys = [start_y]
     target.fillColor = "red"
     target.pos = (start_x, start_y)
-    
+
     line_1.draw()
     line_2.draw()
     target.draw()
+    curve.draw()
     win.flip()
-    core.wait(0.5)
+    core.wait(1)
 
     target.fillColor = "green"
     line_1.draw()
@@ -234,21 +250,20 @@ for iTrial in range(100):
             win.close()
             core.quit()
             break
-        
+
         if assistance_keyAdd in keys:
             rating_ = assistance_rating.getRating() + 1
             if rating_ > assistance_max:
                 rating_ = assistance_max
             assistance_rating.setMarkerPos(rating_)
             isNewPath = True
-            
+
         elif assistance_keySub in keys:
             rating_ = assistance_rating.getRating() - 1
             if rating_ < assistance_min:
                 rating_ = assistance_min
             assistance_rating.setMarkerPos(rating_)
             isNewPath = True
-            
 
         xs.append(mouse_x)
         ys.append(mouse_y)
@@ -258,19 +273,24 @@ for iTrial in range(100):
         core.quit()
         break
 
-    score = fn_score_corr(path_x, xs, start_y, end_y, nPathSamples)
+    score = fn_score_rms(path_x, xs, start_y, end_y, nPathSamples)
     text_score.text = f"score: {score*100:.0f}"
     text_score.draw()
+    curve.draw()
+    curve_self.vertices = list(zip(xs, ys))
+    curve_self.draw()
     win.flip()
     core.wait(1)
-    
+
     if isNewPath:
-        path_x, path_y = generate_path(3, (0.5, 1.3), start_y, end_y, nSample=nPathSamples)
+        path_x, path_y = generate_path(
+            path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
+        )
         isNewPath = False
-        assistance = (assistance_rating.getRating()/assistance_max)**3
+        assistance = (assistance_rating.getRating() / assistance_max) ** 3
+        curve.vertices = list(zip(path_x, path_y))
 
 # Close the window
 win.close()
 
 
-# %%
