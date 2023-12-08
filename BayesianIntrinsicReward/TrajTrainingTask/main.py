@@ -23,13 +23,17 @@ assistance_keySub = "left"
 assistance_min = 0
 assistance_max = 10
 Kp, Ki, Kd = 0.1, 0.01, 0.001
-
+assistance_expo_factor = 3
 
 # Path
 path_n = 3
 path_frequency_range = (0.5, 1.3)
 nPathSamples = 1000
 
+# Noise
+isApplyNoise = True
+noise_mu = 0
+noise_sigma = 0.011
 
 
 def generate_path(n, frequency_range, start_y, end_y, nSample=1000, xy_ratio=0.25):
@@ -64,6 +68,7 @@ def generate_path(n, frequency_range, start_y, end_y, nSample=1000, xy_ratio=0.2
     return x, y
 
 
+# ------------------------------ Score functions ----------------------------- #
 def fn_score_corr(path_x, x, start_y, end_y, nPathSamples):
     """
     Computes the score of the path.
@@ -110,6 +115,18 @@ def fn_assistance(mouse_x, mouse_y, path_x, path_y, assistance):
     return mouse_x
 
 
+# -------------------------- score mapping functions ------------------------- #
+def fn_map_score_linear(x, x_low=0.8, x_high=1):
+    x = np.clip(x, x_low, x_high)
+    x = np.interp(x, (x_low, x_high), (0, 1))
+    return x
+
+
+# ------------------------------ Noise function ------------------------------ #
+def fn_noise_gaussian(x, mu=0, sigma=0.01):
+    return np.random.normal(mu, sigma, x.shape)
+
+
 class PIDController:
     def __init__(self, Kp, Ki, Kd, K=1):
         self.Kp = Kp
@@ -146,8 +163,8 @@ assistance = 0
 path_x, path_y = generate_path(
     path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
 )
-plt.plot(path_x, path_y)
-plt.gca().set_aspect("equal", adjustable="box")
+# plt.plot(path_x, path_y)
+# plt.gca().set_aspect("equal", adjustable="box")
 
 
 
@@ -271,6 +288,10 @@ for iTrial in range(100):
             # limit x velocity
             if np.abs(mouse_x - xs[-1]) > vx_max:
                 mouse_x = xs[-1] + vx_max * np.sign(mouse_x - xs[-1])
+            
+            # apply noise
+            if isApplyNoise:
+                mouse_x += fn_noise_gaussian(mouse_x, noise_mu, noise_sigma)
 
             # x boundary
             if np.abs(mouse_x) > 0.5:
@@ -278,6 +299,7 @@ for iTrial in range(100):
 
             # add assistance
             # mouse_x = fn_assistance(mouse_x, mouse_y, path_x, path_y, assistance)
+            
             # PID
             dt = mouse_y - ys[-1]
             setpoint = np.interp(mouse_y, path_y, path_x)
@@ -325,7 +347,7 @@ for iTrial in range(100):
             assistance_rating.setMarkerPos(rating_)
             isNewPath = True
             
-        assistance = (assistance_rating.getRating() / assistance_max) ** 3
+        assistance = (assistance_rating.getRating() / assistance_max) ** assistance_expo_factor
 
         xs.append(mouse_x)
         ys.append(mouse_y)
@@ -336,6 +358,7 @@ for iTrial in range(100):
         break
 
     score = fn_score_rms(path_x, xs, start_y, end_y, nPathSamples)
+    score = fn_map_score_linear(score)
     text_score.text = f"score: {score*100:.0f}"
     text_score.draw()
     path_true.draw()
@@ -354,7 +377,4 @@ for iTrial in range(100):
 
 # Close the window
 win.close()
-
-q# %%
-
-# %%
+core.quit()
