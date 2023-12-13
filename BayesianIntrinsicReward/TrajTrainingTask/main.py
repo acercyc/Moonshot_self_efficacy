@@ -1,13 +1,50 @@
 # %%
 import numpy as np
-from psychopy import visual, core, event
-from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
+from psychopy import visual, core, gui, event
+from datetime import datetime
+import os
 
+# ---------------------------------------------------------------------------- #
+#                                   switches                                   #
+# ---------------------------------------------------------------------------- #
+isFullScreen = True # True for full screen, False for windowed mode
+isApplyNoise = False
+
+# ---------------------------------------------------------------------------- #
+#                        Enter experimental information                        #
+# ---------------------------------------------------------------------------- #
+info = {
+    "Participant ID": "",
+    "Number of Block": 3,
+    "date": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+    "Practice Mode": False,  # Add this line
+}
+
+infoDlg = gui.DlgFromDict(
+    dictionary=info,
+    title="Input information",
+    order=["Participant ID", "Number of Block", "date", "Practice Mode"],  # Add "Mode" here
+)
+
+if infoDlg.OK == False:
+    core.quit()  # user pressed cancel
+    
+
+isPractice = info["Practice Mode"] 
+
+# ---------------------------------------------------------------------------- #
+#                    Create data folder if it doesn't exist'                   #
+# ---------------------------------------------------------------------------- #
+if not os.path.exists("data"):
+    os.makedirs("data")
 
 # ---------------------------------------------------------------------------- #
 #                                  parameters                                  #
 # ---------------------------------------------------------------------------- #
+nTrial_inBlock = 60
+nTrial_practice = 2
+nBlock = info["Number of Block"]
+
 # target
 radius = 0.005
 vx_max = 0.05
@@ -22,18 +59,17 @@ assistance_keyAdd = "right"
 assistance_keySub = "left"
 assistance_min = 0
 assistance_max = 10
-Kp, Ki, Kd = 0.1, 0.01, 0.001
+Kp, Ki, Kd = 1, 0.01, 0.001
 assistance_expo_factor = 3
 
-# Path
+# Path shape
 path_n = 3
 path_frequency_range = (0.5, 1.3)
 nPathSamples = 1000
 
 # Noise
-isApplyNoise = True
 noise_mu = 0
-noise_sigma = 0.011
+noise_sigma = 0.005
 
 
 def generate_path(n, frequency_range, start_y, end_y, nSample=1000, xy_ratio=0.25):
@@ -150,6 +186,7 @@ class PIDController:
 
         return control * self.K
 
+
 # ---------------------------------------------------------------------------- #
 #                                Initialization                                #
 # ---------------------------------------------------------------------------- #
@@ -158,18 +195,6 @@ start_x, start_y = 0, line_pos_down
 end_x, end_y = 0, line_pos_up
 isNewPath = False
 assistance = 0
-
-# create path
-path_x, path_y = generate_path(
-    path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
-)
-# plt.plot(path_x, path_y)
-# plt.gca().set_aspect("equal", adjustable="box")
-
-
-
-# %%
-Kp, Ki, Kd = 1, 0.01, 0.001
 PID = PIDController(Kp, Ki, Kd)
 
 
@@ -178,21 +203,24 @@ PID = PIDController(Kp, Ki, Kd)
 # ---------------------------------------------------------------------------- #
 # Create window
 win = visual.Window(
-    [800, 800], units="height", checkTiming=False, color="black", fullscr=True
+    [800, 800], units="height", checkTiming=False, color="black", fullscr=isFullScreen
 )
 
 # up and down boundary lines
-line_down = visual.Line(win, start=(-0.5, start_y), end=(0.5, start_y), lineColor="white")
+line_down = visual.Line(
+    win, start=(-0.5, start_y), end=(0.5, start_y), lineColor="white"
+)
 line_up = visual.Line(win, start=(-0.5, end_y), end=(0.5, end_y), lineColor="white")
 
 
 # Path stimuli
+
 path_true = visual.ShapeStim(
-    win, vertices=list(zip(path_x, path_y)), closeShape=False, lineColor=[0.3, 0.3, 0.3]
+    win, vertices=None, closeShape=False, lineColor=[0.3, 0.3, 0.3]
 )
 
 path_self = visual.ShapeStim(
-    win, vertices=list(zip(path_x, path_y)), closeShape=False, lineColor=[-1, 1, -1]
+    win, vertices=None, closeShape=False, lineColor=[-1, 1, -1]
 )
 
 # target
@@ -223,157 +251,299 @@ assistance_rating = visual.RatingScale(
 
 # Score
 text_score = visual.TextStim(
-    win, text="score: ", pos=(0, 0.4), color="white", height=0.05
+    win, text="score: ", pos=(0, 0.1), color="white", height=0.05
 )
 
 # mouse
 mouse = event.Mouse(win=win)
 
-
 # ---------------------------------------------------------------------------- #
 #                             Initialise experiment                            #
 # ---------------------------------------------------------------------------- #
-
-line_down.draw()
-line_up.draw()
-text_score.draw()
-path_true.draw()
-assistance_rating.draw()
-target.draw()
-win.flip()
-mouse.setVisible(0)
-
+iTrial = 0
+data = {'expInfo': info, 'blockInfo':[], 'trialInfo': []}
 
 # ---------------------------------------------------------------------------- #
 #                               Experiment Start                               #
 # ---------------------------------------------------------------------------- #
-for iTrial in range(100):
-    # --------------------------- Trail initialisation --------------------------- #
-    # Reset mouse position
-    xs = [start_x]
-    ys = [start_y]
-    target.fillColor = "red"
-    target.pos = (start_x, start_y)
-
-    line_down.draw()
-    line_up.draw()
-    target.draw()
-    path_true.draw()
-    win.flip()
-    core.wait(1)
-
-    target.fillColor = "green"
-    line_down.draw()
-    line_up.draw()
-    target.draw()
-    win.flip()
-
-    mouse.setPos((start_x, start_y))
+if isPractice:
+    welcome_message = f"Welcome to the practice session!\n\nClick mouse button to continue"
+else:
+    welcome_message = f"Welcome to the experiment!\n\nClick mouse button to continue"
     
-    # -------------------------------- Trial start ------------------------------- #
-    while True:
-        
-        # ------------------- Detect and manipulate mouse position ------------------- #
-        mouse_x, mouse_y = mouse.getPos()
 
-        # if mouse_y is negative, change it to 0
-        if (mouse_y - ys[-1]) <= 0:
-            mouse_y = ys[-1]
-            mouse_x = xs[-1]
-        else:
-            # limit y velocity
-            if (mouse_y - ys[-1]) > vy_max:
-                mouse_y = ys[-1] + vy_max
+text_message = visual.TextStim(
+    win,
+    pos=(0, 0),
+    color="white",
+    height=0.05,
+    text=welcome_message
+)
 
-            # limit x velocity
-            if np.abs(mouse_x - xs[-1]) > vx_max:
-                mouse_x = xs[-1] + vx_max * np.sign(mouse_x - xs[-1])
-            
-            # apply noise
-            if isApplyNoise:
-                mouse_x += fn_noise_gaussian(mouse_x, noise_mu, noise_sigma)
+text_message.draw()
+win.flip()
+mouse.setVisible(0)
 
-            # x boundary
-            if np.abs(mouse_x) > 0.5:
-                mouse_x = 0.5 * np.sign(mouse_x)
-
-            # add assistance
-            # mouse_x = fn_assistance(mouse_x, mouse_y, path_x, path_y, assistance)
-            
-            # PID
-            dt = mouse_y - ys[-1]
-            setpoint = np.interp(mouse_y, path_y, path_x)
-            mouse_x_asssistance = PID.update(mouse_x, setpoint, 1/60, assistance)
-            mouse_x += mouse_x_asssistance
-            
-            # # limit x velocity
-            # if np.abs(mouse_x - xs[-1]) > vx_max:
-            #     mouse_x = xs[-1] + vx_max * np.sign(mouse_x - xs[-1])
-
-            # End trial if mouse reaches the end
-            if mouse_y >= end_y:
-                break
-
-        # set mouse position
-        target.pos = (mouse_x, mouse_y)
-        mouse.setPos((mouse_x, mouse_y))
-
-        # ------------------------------ Present stimuli ----------------------------- #
-        line_down.draw()
-        line_up.draw()
-        target.draw()
-        assistance_rating.draw()
-        win.flip()
-
-        keys = event.getKeys()
-
-        # ------------------------------ Keybaord event ------------------------------ #
-        if "q" in keys:
-            win.close()
-            core.quit()
-            break
-
-        if assistance_keyAdd in keys:
-            rating_ = assistance_rating.getRating() + 1
-            if rating_ > assistance_max:
-                rating_ = assistance_max
-            assistance_rating.setMarkerPos(rating_)
-            isNewPath = True
-
-        elif assistance_keySub in keys:
-            rating_ = assistance_rating.getRating() - 1
-            if rating_ < assistance_min:
-                rating_ = assistance_min
-            assistance_rating.setMarkerPos(rating_)
-            isNewPath = True
-            
-        assistance = (assistance_rating.getRating() / assistance_max) ** assistance_expo_factor
-
-        xs.append(mouse_x)
-        ys.append(mouse_y)
-
+# click mouse to start
+while True:
+    mouse.setPos((0, 0))
+    if mouse.getPressed()[0]:
+        break
     if "q" in event.getKeys():
         win.close()
         core.quit()
         break
 
-    score = fn_score_rms(path_x, xs, start_y, end_y, nPathSamples)
-    score = fn_map_score_linear(score)
-    text_score.text = f"score: {score*100:.0f}"
-    text_score.draw()
-    path_true.draw()
-    path_self.vertices = list(zip(xs, ys))
-    path_self.draw()
-    win.flip()
-    core.wait(1)
+# release mouse press
+while True:
+    if not mouse.getPressed()[0]:
+        break
 
-    if isNewPath:
-        path_x, path_y = generate_path(
-            path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
-        )
-        isNewPath = False
-        assistance = (assistance_rating.getRating() / assistance_max) ** 3
-        path_true.vertices = list(zip(path_x, path_y))
+# ---------------------------------------------------------------------------- #
+#                             Initialise block                                 #
+# ---------------------------------------------------------------------------- #
+for iBlock in range(nBlock):
+    # create new path
+    path_x, path_y = generate_path(
+        path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
+    )
+    path_true.vertices = list(zip(path_x, path_y))
+    
+    # reset assistance
+    assistance_rating.setMarkerPos(0)
+    assistance = 0
+    
+    # show block message
+    text_message = visual.TextStim(
+        win,
+        pos=(0, 0),
+        color="white",
+        height=0.05,
+        text=f"[ Block {iBlock+1} ]\n\nClick mouse button to start"
+    )
+    text_message.draw()
+    win.flip()    
+    mouse.setVisible(0)
+
+
+    # save blockInfo
+    data['blockInfo'].append({'iBlock': iBlock, 'path_x': path_x, 'path_y': path_y})
+
+    # click mouse to start
+    while True:
+        mouse.setPos((0, 0))
+        if mouse.getPressed()[0]:
+            break
+        if "q" in event.getKeys():
+            win.close()
+            core.quit()
+            break
+
+    # release mouse press
+    while True:
+        if not mouse.getPressed()[0]:
+            break
+    # ---------------------------------------------------------------------------- #
+    #                                  Trial loop                                  #
+    # ---------------------------------------------------------------------------- #
+    if isPractice:
+        nTrial = nTrial_practice
+    else:
+        nTrial = nTrial_inBlock
+    
+    for iTrial_block in range(nTrial):
+        # --------------------------- Trail initialisation --------------------------- #
+        # Reset mouse position
+        xs = [start_x]
+        ys = [start_y]
+        target.fillColor = "red"
+        target.pos = (start_x, start_y)
+
+        line_down.draw()
+        line_up.draw()
+        target.draw()
+        assistance_rating.draw()
+        win.flip()
+        
+        # --------------------------- assistance operation --------------------------- #
+        while True:
+            # fix mouse positions
+            mouse.setPos((start_x, start_y))
+            
+            # detect keyboard event
+            keys = event.getKeys()
+            if "q" in keys:
+                win.close()
+                core.quit()
+                break
+            
+            # increase or decrease assistance
+            if assistance_keyAdd in keys:
+                rating_ = assistance_rating.getRating() + 1
+                if rating_ > assistance_max:
+                    rating_ = assistance_max
+                assistance_rating.setMarkerPos(rating_)
+
+            elif assistance_keySub in keys:
+                rating_ = assistance_rating.getRating() - 1
+                if rating_ < assistance_min:
+                    rating_ = assistance_min
+                assistance_rating.setMarkerPos(rating_)
+                            
+            line_down.draw()
+            line_up.draw()
+            target.draw()
+            assistance_rating.draw()
+            win.flip()
+            
+            # click to continue
+            if mouse.getPressed()[0]:
+                break
+        
+        # setup assistance
+        assistance = (
+            assistance_rating.getRating() / assistance_max
+        ) ** assistance_expo_factor
+        
+        # show path and wait for 1 second
+        target.fillColor = "yellow"
+        line_down.draw()
+        line_up.draw()
+        target.draw()
+        assistance_rating.draw()
+        path_true.draw()
+        win.flip()
+        core.wait(1) 
+        
+        # go signal
+        target.fillColor = "green"
+        line_down.draw()
+        line_up.draw()
+        target.draw()
+        assistance_rating.draw()
+        t0 = core.getTime()
+        win.flip()
+        mouse.setPos((start_x, start_y))
+        # ---------------------------------------------------------------------------- #
+        #                                  Trial start                                 #
+        # ---------------------------------------------------------------------------- #
+        while True:
+            # get time
+            t_start = core.getTime()
+
+            # ------------------- Detect and manipulate mouse position ------------------- #
+            mouse_x, mouse_y = mouse.getPos()
+
+            # if mouse_y shift is negative, change it to 0
+            if (mouse_y - ys[-1]) <= 0:
+                mouse_y = ys[-1]
+                mouse_x = xs[-1]
+            else:
+                # limit y velocity
+                if (mouse_y - ys[-1]) > vy_max:
+                    mouse_y = ys[-1] + vy_max
+
+                # limit x velocity
+                if np.abs(mouse_x - xs[-1]) > vx_max:
+                    mouse_x = xs[-1] + vx_max * np.sign(mouse_x - xs[-1])
+
+                # apply noise
+                if isApplyNoise:
+                    mouse_x += fn_noise_gaussian(mouse_x, noise_mu, noise_sigma)
+
+                # x boundary
+                if np.abs(mouse_x) > 0.5:
+                    mouse_x = 0.5 * np.sign(mouse_x)
+
+                # PID
+                dt = mouse_y - ys[-1]
+                setpoint = np.interp(mouse_y, path_y, path_x)
+                mouse_x_asssistance = PID.update(mouse_x, setpoint, t_start-t0, assistance)
+                mouse_x += mouse_x_asssistance
+                t0 = t_start
+
+                # End trial if mouse reaches the end
+                if mouse_y >= end_y:
+                    # get time
+                    t_end = core.getTime()
+                    break
+
+            # set mouse position
+            target.pos = (mouse_x, mouse_y)
+            mouse.setPos((mouse_x, mouse_y))
+
+            # ------------------------------ Present stimuli ----------------------------- #
+            line_down.draw()
+            line_up.draw()
+            target.draw()
+            assistance_rating.draw()
+            win.flip()
+
+
+            # ------------------------------ Keybaord event ------------------------------ #
+            if "q" in keys:
+                win.close()
+                core.quit()
+                break
+
+            xs.append(mouse_x)
+            ys.append(mouse_y)
+
+        # ---------------------------------------------------------------------------- #
+        #                                   Trial end                                  #
+        # ---------------------------------------------------------------------------- #
+        # reset mouse position
+        mouse.setPos((start_x, start_y))
+        
+        # calculate score
+        score = fn_score_rms(path_x, xs, start_y, end_y, nPathSamples)
+        score_map = fn_map_score_linear(score)
+        
+        # show score
+        text_score.text = f"score: {score_map*100:.0f}"
+        text_score.draw()
+        
+        # show true path
+        path_true.draw()
+        
+        # show path from participant
+        path_self.vertices = list(zip(xs, ys))
+        path_self.draw()
+        win.flip()
+        
+        # record data
+        data_ = {'iBlock': iBlock, 
+                 'iTrial': iTrial, 
+                 'score': score, 
+                 'score_map': score_map, 
+                 'assistance': assistance, 
+                 'xs': xs, 
+                 'ys': ys,
+                 't_start': t_start,
+                 't_end': t_end, 
+                 't_duration': t_end - t_start}
+        
+        data['trialInfo'].append(data_)
+        
+        # save data
+        if isPractice:
+            np.save(f"data/{info['Participant ID']}_{info['date']}_practice.npy", data)
+        else:           
+            np.save(f"data/{info['Participant ID']}_{info['date']}.npy", data)
+        core.wait(1)
+
+# end message
+text_message = visual.TextStim(
+    win,
+    pos=(0, 0),
+    color="white",
+    height=0.05,
+    text=f"End of the experiment!\n\nThank you for your participation!"
+)
+text_message.draw()
+win.flip()
+core.wait(5)
+
 
 # Close the window
 win.close()
