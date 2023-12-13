@@ -42,7 +42,7 @@ if not os.path.exists("data"):
 #                                  parameters                                  #
 # ---------------------------------------------------------------------------- #
 nTrial_inBlock = 60
-nTrial_practice = 2
+nTrial_practice = 15
 nBlock = info["Number of Block"]
 
 # target
@@ -215,12 +215,24 @@ line_up = visual.Line(win, start=(-0.5, end_y), end=(0.5, end_y), lineColor="whi
 
 # Path stimuli
 
+# path_true = visual.ShapeStim(
+#     win, vertices=None, closeShape=False, lineColor=[0.3, 0.3, 0.3]
+# )
+
+# path_self = visual.ShapeStim(
+#     win, vertices=None, closeShape=False, lineColor=[-1, 1, -1]
+# )
+path_x, path_y = generate_path(
+    path_n, path_frequency_range, start_y, end_y, nSample=nPathSamples
+)
+
+
 path_true = visual.ShapeStim(
-    win, vertices=None, closeShape=False, lineColor=[0.3, 0.3, 0.3]
+    win, vertices=list(zip(path_x, path_y)), closeShape=False, lineColor=[0.3, 0.3, 0.3]
 )
 
 path_self = visual.ShapeStim(
-    win, vertices=None, closeShape=False, lineColor=[-1, 1, -1]
+    win, vertices=list(zip(path_x, path_y)), closeShape=False, lineColor=[-1, 1, -1]
 )
 
 # target
@@ -233,19 +245,32 @@ assistance_rating = visual.RatingScale(
     win,
     low=assistance_min,
     high=assistance_max,
+    leftKeys=assistance_keySub,
+    rightKeys=assistance_keyAdd,
     precision=1,
     size=0.25,
     stretch=4,
     scale=None,
     markerStart=0,
+    tickHeight=-1,
     pos=(0, -0.9),
     textColor="white",
+    textSize=3,
     lineColor="white",
-    showValue=False,
+    showValue=True,
     markerColor="white",
     marker="triangle",
     showAccept=False,
     noMouse=True,
+)
+
+# text message
+text_message = visual.TextStim(
+    win,
+    pos=(0, 0),
+    color="white",
+    height=0.05,
+    text=''
 )
 
 
@@ -270,16 +295,8 @@ if isPractice:
     welcome_message = f"Welcome to the practice session!\n\nClick mouse button to continue"
 else:
     welcome_message = f"Welcome to the experiment!\n\nClick mouse button to continue"
-    
 
-text_message = visual.TextStim(
-    win,
-    pos=(0, 0),
-    color="white",
-    height=0.05,
-    text=welcome_message
-)
-
+text_message.text = welcome_message
 text_message.draw()
 win.flip()
 mouse.setVisible(0)
@@ -289,7 +306,7 @@ while True:
     mouse.setPos((0, 0))
     if mouse.getPressed()[0]:
         break
-    if "q" in event.getKeys():
+    if "q" in event.getKeys(keyList=["q"]):
         win.close()
         core.quit()
         break
@@ -314,13 +331,7 @@ for iBlock in range(nBlock):
     assistance = 0
     
     # show block message
-    text_message = visual.TextStim(
-        win,
-        pos=(0, 0),
-        color="white",
-        height=0.05,
-        text=f"[ Block {iBlock+1} ]\n\nClick mouse button to start"
-    )
+    text_message.text = f"[ Block {iBlock+1} ]\n\nClick mouse button to start"
     text_message.draw()
     win.flip()    
     mouse.setVisible(0)
@@ -334,7 +345,7 @@ for iBlock in range(nBlock):
         mouse.setPos((0, 0))
         if mouse.getPressed()[0]:
             break
-        if "q" in event.getKeys():
+        if "q" in event.getKeys(keyList=["q"]):
             win.close()
             core.quit()
             break
@@ -356,6 +367,7 @@ for iBlock in range(nBlock):
         # Reset mouse position
         xs = [start_x]
         ys = [start_y]
+        ts = []
         target.fillColor = "red"
         target.pos = (start_x, start_y)
 
@@ -421,7 +433,7 @@ for iBlock in range(nBlock):
         line_up.draw()
         target.draw()
         assistance_rating.draw()
-        t0 = core.getTime()
+        ts.append(core.getTime())
         win.flip()
         mouse.setPos((start_x, start_y))
         # ---------------------------------------------------------------------------- #
@@ -429,7 +441,7 @@ for iBlock in range(nBlock):
         # ---------------------------------------------------------------------------- #
         while True:
             # get time
-            t_start = core.getTime()
+            t = core.getTime()
 
             # ------------------- Detect and manipulate mouse position ------------------- #
             mouse_x, mouse_y = mouse.getPos()
@@ -456,16 +468,14 @@ for iBlock in range(nBlock):
                     mouse_x = 0.5 * np.sign(mouse_x)
 
                 # PID
-                dt = mouse_y - ys[-1]
+                # dt = mouse_y - ys[-1]
                 setpoint = np.interp(mouse_y, path_y, path_x)
-                mouse_x_asssistance = PID.update(mouse_x, setpoint, t_start-t0, assistance)
+                # mouse_x_asssistance = PID.update(mouse_x, setpoint, 1/60, assistance)
+                mouse_x_asssistance = PID.update(mouse_x, setpoint, t-ts[-1] , assistance)
                 mouse_x += mouse_x_asssistance
-                t0 = t_start
 
                 # End trial if mouse reaches the end
                 if mouse_y >= end_y:
-                    # get time
-                    t_end = core.getTime()
                     break
 
             # set mouse position
@@ -479,15 +489,16 @@ for iBlock in range(nBlock):
             assistance_rating.draw()
             win.flip()
 
-
+            # ------------------------------ Record data ------------------------------ #
+            xs.append(mouse_x)
+            ys.append(mouse_y)
+            ts.append(t)
+            
             # ------------------------------ Keybaord event ------------------------------ #
-            if "q" in keys:
+            if "q" in event.getKeys(keyList=["q"]):
                 win.close()
                 core.quit()
                 break
-
-            xs.append(mouse_x)
-            ys.append(mouse_y)
 
         # ---------------------------------------------------------------------------- #
         #                                   Trial end                                  #
@@ -519,9 +530,10 @@ for iBlock in range(nBlock):
                  'assistance': assistance, 
                  'xs': xs, 
                  'ys': ys,
-                 't_start': t_start,
-                 't_end': t_end, 
-                 't_duration': t_end - t_start}
+                 'ts': ts,
+                 't_start': ts[0],
+                 't_end': ts[-1], 
+                 't_duration': ts[-1] - ts[0]}
         
         data['trialInfo'].append(data_)
         
@@ -533,16 +545,10 @@ for iBlock in range(nBlock):
         core.wait(1)
 
 # end message
-text_message = visual.TextStim(
-    win,
-    pos=(0, 0),
-    color="white",
-    height=0.05,
-    text=f"End of the experiment!\n\nThank you for your participation!"
-)
+text_message.text=f"End of the experiment!\n\nThank you for your participation!"
 text_message.draw()
 win.flip()
-core.wait(5)
+core.wait(4)
 
 
 # Close the window
