@@ -7,7 +7,7 @@ import os
 # ---------------------------------------------------------------------------- #
 #                                   switches                                   #
 # ---------------------------------------------------------------------------- #
-isFullScreen = True # True for full screen, False for windowed mode
+isFullScreen = False # True for full screen, False for windowed mode
 isApplyNoise = False
 
 # ---------------------------------------------------------------------------- #
